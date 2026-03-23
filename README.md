@@ -73,6 +73,11 @@ Examples:
 
 Renders each STL in one team directory into PNG previews using Blender's Python environment.
 
+It also runs a Blender-based fit check for a `220x220x250 mm` printer volume. The
+check ignores orientation: if Blender finds an orientation where the part fits, the
+part is marked as fitting. Otherwise the part is marked as oversized in that part's
+`.render.tsv` file.
+
 Defaults:
 
 - Angles: `90 180 270 360`
@@ -98,7 +103,9 @@ It:
 - reads the recipient from `email.txt`
 - reads all `*.stl` files in the team folder
 - pulls the matching rendered image for each part
+- reads each part's `.render.tsv` when present
 - embeds those images into the email
+- adds a warning section for any part marked oversized by `render.py`
 - writes `receipt-<team-number>.eml` unless `--output` is provided
 
 Examples:
@@ -147,6 +154,7 @@ fd -td -d 1 . -x blender --background --python ../render.py -- {}
 ```
 
 The renderer skips up-to-date outputs and tracks the expected render state in `.render.tsv` inside each part folder.
+That manifest also stores the result of the `220x220x250 mm` fit check.
 
 ### 4. Generate receipts
 
@@ -180,4 +188,3 @@ Open the generated `.eml` files in your mail client, inspect them, then send.
 - No STL files in a team folder: `render.py` and `compose.py` exit.
 - Missing render image for a part: `compose.py` exits.
 - Filename cleanup collision: `clean_hubspot_dl_names.sh` exits unless `--force` is used.
-

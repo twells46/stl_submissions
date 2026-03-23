@@ -9,6 +9,11 @@ from pathlib import Path
 DEFAULT_FROM = "twells@kipr.org"
 DEFAULT_IMAGE_ANGLE = 270
 DEFAULT_SIGNATURE = "Sincerely,\nThomas Wells"
+OVERSIZE_WARNING_TEMPLATE = (
+    '"{display_name}" seems to be larger than 220x220x250 mm. '
+    "This might be fine if you scaled the part when printing, but your physical part "
+    "may be checked at the event."
+)
 
 
 def parse_args():
@@ -86,6 +91,25 @@ def build_cid(team_number, image_angle, part_name):
     return f"{part_name}.{token}@local"
 
 
+def load_manifest(manifest_path):
+    if not manifest_path.is_file():
+        return {}
+
+    manifest = {}
+    for line in manifest_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        key, sep, value = line.partition("\t")
+        if not sep:
+            continue
+        manifest[key] = value
+    return manifest
+
+
+def build_oversize_warning(part):
+    return OVERSIZE_WARNING_TEMPLATE.format(display_name=part["display_name"])
+
+
 def collect_parts(team_dir, team_number, image_angle):
     stl_files = sorted(team_dir.glob("*.stl"))
     if not stl_files:
@@ -96,12 +120,14 @@ def collect_parts(team_dir, team_number, image_angle):
         image_path = team_dir / stl_path.stem / f"{image_angle}.png"
         if not image_path.is_file():
             raise SystemExit(f"Missing rendered image for {stl_path.name}: {image_path}")
+        manifest = load_manifest(team_dir / stl_path.stem / ".render.tsv")
         parts.append(
             {
                 "name": stl_path.stem,
                 "display_name": stl_path.stem.replace("_", " "),
                 "image_path": image_path,
                 "cid": build_cid(team_number, image_angle, stl_path.stem),
+                "oversized": manifest.get("fit_status") == "oversized",
             }
         )
     return parts
@@ -110,6 +136,7 @@ def collect_parts(team_dir, team_number, image_angle):
 def build_plain_text(team_number, team_label, parts):
     count = len(parts)
     noun = "part" if count == 1 else "parts"
+    warnings = [build_oversize_warning(part) for part in parts if part["oversized"]]
     lines = [
         f"Team {team_number} ({team_label}),",
         "",
@@ -121,6 +148,10 @@ def build_plain_text(team_number, team_label, parts):
         "Approved parts:",
     ]
     lines.extend(f"- {part['display_name']}" for part in parts)
+    if warnings:
+        lines.append("")
+        lines.append("Warnings:")
+        lines.extend(warnings)
     lines.append("")
     lines.extend(DEFAULT_SIGNATURE.split("\n"))
     return "\n".join(lines)
@@ -134,6 +165,7 @@ def build_html_signature():
 def build_html(team_number, team_label, parts):
     count = len(parts)
     noun = "part" if count == 1 else "parts"
+    warnings = [build_oversize_warning(part) for part in parts if part["oversized"]]
 
     blocks = []
     for part in parts:
@@ -147,11 +179,25 @@ def build_html(team_number, team_label, parts):
             )
         )
 
+    warning_block = ""
+    if warnings:
+        warning_items = "".join(
+            f"<li>{html.escape(warning)}</li>"
+            for warning in warnings
+        )
+        warning_block = (
+            '<div style="margin: 0 0 24px;">'
+            '<p style="margin: 0 0 8px;"><strong>Warnings</strong></p>'
+            f"<ul style=\"margin: 0; padding-left: 20px;\">{warning_items}</ul>"
+            "</div>"
+        )
+
     return (
         f"<p>Team {team_number} ({team_label}),</p>"
         f"<p>Thank you for your submission. This email certifies that you may use the "
         f"<b>{count}</b> {noun} pictured below.</p>"
         f"{''.join(blocks)}"
+        f"{warning_block}"
         f"<p>{build_html_signature()}</p>"
     )
 
