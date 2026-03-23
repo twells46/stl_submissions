@@ -1,4 +1,5 @@
 import argparse
+from datetime import date
 import hashlib
 import html
 import mimetypes
@@ -12,7 +13,7 @@ DEFAULT_SIGNATURE = "Sincerely,\nThomas Wells"
 OVERSIZE_WARNING_TEMPLATE = (
     '"{display_name}" seems to be larger than 220x220x250 mm. '
     "This might be fine if you scaled the part when printing, but your physical part "
-    "may be checked at the event."
+    "may be measured at the event."
 )
 
 
@@ -133,7 +134,7 @@ def collect_parts(team_dir, team_number, image_angle):
     return parts
 
 
-def build_plain_text(team_number, team_label, parts):
+def build_plain_text(team_number, team_label, event_year, parts):
     count = len(parts)
     noun = "part" if count == 1 else "parts"
     warnings = [build_oversize_warning(part) for part in parts if part["oversized"]]
@@ -141,17 +142,19 @@ def build_plain_text(team_number, team_label, parts):
         f"Team {team_number} ({team_label}),",
         "",
         (
-            f"Thank you for your submission. This email certifies that you may use "
-            f"the {count} {noun} pictured below."
+            f"Thank you for your submission. This email certifies our receipt of "
+            f"the {count} {noun} below. Pending physical measurement and the head "
+            f"judge's approval, these parts may be used at {event_year} Botball "
+            f"regional events."
         ),
         "",
-        "Approved parts:",
     ]
-    lines.extend(f"- {part['display_name']}" for part in parts)
     if warnings:
-        lines.append("")
         lines.append("Warnings:")
         lines.extend(warnings)
+        lines.append("")
+    lines.append("Submitted parts:")
+    lines.extend(f"- {part['display_name']}" for part in parts)
     lines.append("")
     lines.extend(DEFAULT_SIGNATURE.split("\n"))
     return "\n".join(lines)
@@ -162,7 +165,7 @@ def build_html_signature():
     return escaped_signature.replace("\n", "<br>\n")
 
 
-def build_html(team_number, team_label, parts):
+def build_html(team_number, team_label, event_year, parts):
     count = len(parts)
     noun = "part" if count == 1 else "parts"
     warnings = [build_oversize_warning(part) for part in parts if part["oversized"]]
@@ -194,10 +197,12 @@ def build_html(team_number, team_label, parts):
 
     return (
         f"<p>Team {team_number} ({team_label}),</p>"
-        f"<p>Thank you for your submission. This email certifies that you may use the "
-        f"<b>{count}</b> {noun} pictured below.</p>"
-        f"{''.join(blocks)}"
+        f"<p>Thank you for your submission. This email certifies our receipt of "
+        f"the <b>{count}</b> {noun} below. Pending physical measurement and the "
+        f"head judge&#39;s approval, these parts may be used at {event_year} "
+        f"Botball regional events.</p>"
         f"{warning_block}"
+        f"{''.join(blocks)}"
         f"<p>{build_html_signature()}</p>"
     )
 
@@ -237,14 +242,25 @@ def set_boundaries(msg, html_part, team_number, team_label, recipient, from_addr
     html_part.set_boundary(f"images-{related_boundary}")
 
 
-def build_message(team_number, team_label, recipient, from_address, image_angle, parts):
+def build_message(
+    team_number,
+    team_label,
+    recipient,
+    from_address,
+    image_angle,
+    event_year,
+    parts,
+):
     msg = EmailMessage()
     msg["Subject"] = f"3D Model Submission Receipt - Team {team_number}"
     msg["From"] = from_address
     msg["To"] = recipient
 
-    msg.set_content(build_plain_text(team_number, team_label, parts))
-    msg.add_alternative(build_html(team_number, team_label, parts), subtype="html")
+    msg.set_content(build_plain_text(team_number, team_label, event_year, parts))
+    msg.add_alternative(
+        build_html(team_number, team_label, event_year, parts),
+        subtype="html",
+    )
 
     html_part = msg.get_payload()[-1]
     attach_images(html_part, parts)
@@ -276,6 +292,7 @@ def main():
         raise SystemExit(f"Team directory does not exist: {team_dir}")
 
     team_number, team_label = parse_team_dir_name(team_dir)
+    event_year = date.today().year
     recipient = load_recipient(team_dir)
     parts = collect_parts(team_dir, team_number, args.image_angle)
 
@@ -291,6 +308,7 @@ def main():
         recipient,
         args.from_address,
         args.image_angle,
+        event_year,
         parts,
     )
     msg_bytes = bytes(msg)
