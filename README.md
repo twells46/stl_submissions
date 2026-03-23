@@ -57,7 +57,7 @@ Each team directory must look like this:
 
 Normalizes downloaded STL filenames.
 
-- If a HubSpot-style filename ends with `-stl_file-<part name>-<id>.stl`, it strips the prefix and suffix.
+- Hubspot form response files are named like `<uuid>-stl_file-<part name>-<id>.stl`. This script strips it to `<part_name>.stl`.
 - Spaces are converted to underscores.
 - Files that already look clean are skipped.
 
