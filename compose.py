@@ -65,7 +65,7 @@ def parse_team_dir_name(team_dir):
             f"Team directory must be named like <team number>-<team name>: {team_dir}"
         )
     team_number, team_label = team_name.split("-", 1)
-    return team_number, team_label
+    return team_number, team_label.replace("_", " ")
 
 
 def load_recipient(team_dir):
@@ -141,12 +141,7 @@ def build_plain_text(team_number, team_label, event_year, parts):
     lines = [
         f"Team {team_number} ({team_label}),",
         "",
-        (
-            f"Thank you for your submission. This email certifies our receipt of "
-            f"the {count} {noun} below. Pending physical measurement and the head "
-            f"judge's approval, these parts may be used at {event_year} Botball "
-            f"regional events."
-        ),
+        build_receipt_intro(count, noun, event_year),
         "",
     ]
     if warnings:
@@ -163,6 +158,18 @@ def build_plain_text(team_number, team_label, event_year, parts):
 def build_html_signature():
     escaped_signature = html.escape(DEFAULT_SIGNATURE)
     return escaped_signature.replace("\n", "<br>\n")
+
+
+def build_receipt_intro(count, noun, event_year):
+    subject = "This part" if count == 1 else "These parts"
+    return (
+        f"Thank you for your submission! This email certifies our receipt of the "
+        f"{count} {noun} below. Pending physical measurement and the head judge's "
+        f"approval, {subject.lower()} may be used at {event_year} Botball regional "
+        f"events. If any submitted part is an open-source model from a "
+        f"previous year, it is very likely to be approved at the event, though final "
+        f"approval remains with the head judge."
+    )
 
 
 def build_html(team_number, team_label, event_year, parts):
@@ -197,10 +204,7 @@ def build_html(team_number, team_label, event_year, parts):
 
     return (
         f"<p>Team {team_number} ({team_label}),</p>"
-        f"<p>Thank you for your submission. This email certifies our receipt of "
-        f"the <b>{count}</b> {noun} below. Pending physical measurement and the "
-        f"head judge&#39;s approval, these parts may be used at {event_year} "
-        f"Botball regional events.</p>"
+        f"<p>{html.escape(build_receipt_intro(count, noun, event_year)).replace(str(count), f'<b>{count}</b>', 1)}</p>"
         f"{warning_block}"
         f"{''.join(blocks)}"
         f"<p>{build_html_signature()}</p>"
