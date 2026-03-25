@@ -3,6 +3,7 @@ from datetime import date
 import hashlib
 import html
 import mimetypes
+import re
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -90,7 +91,8 @@ def stable_token(*parts, length=16):
 
 def build_cid(team_number, image_angle, part_name):
     token = stable_token(team_number, image_angle, part_name)
-    return f"{part_name}.{token}@local"
+    cid_label = re.sub(r"[^a-z0-9]+", "-", part_name.lower()).strip("-") or "part"
+    return f"{cid_label}.{token}@local"
 
 
 def load_manifest(manifest_path):

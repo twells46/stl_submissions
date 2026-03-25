@@ -116,6 +116,25 @@ python compose.py Oklahoma/11-KIPR --dry-run
 python compose.py Oklahoma/11-KIPR --force
 ```
 
+### `run_region.sh`
+
+Runs the full three-stage pipeline for one region:
+
+1. normalize STL filenames
+2. render previews with Blender
+3. generate receipt `.eml` files
+
+It uses `fd ... -x ...` for each stage, so STL cleanup and per-team work can run in parallel.
+By default it suppresses `skip` lines and only prints work that changed something. Use `-v`
+to show all stage output.
+
+Examples:
+
+```sh
+./run_region.sh Oklahoma
+./run_region.sh -v Oklahoma
+```
+
 ## Workflow
 
 ### 1. Create the region folder
@@ -174,6 +193,18 @@ fd -td -d 1 . -x python ../compose.py {}
 ```
 
 Open the generated `.eml` files in your mail client, inspect them, then send.
+
+### 5. Or run the whole region at once
+
+```sh
+./run_region.sh Oklahoma
+```
+
+Verbose mode:
+
+```sh
+./run_region.sh -v Oklahoma
+```
 
 ## Requirements
 
