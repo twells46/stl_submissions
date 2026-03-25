@@ -10,6 +10,7 @@ from pathlib import Path
 DEFAULT_FROM = "twells@kipr.org"
 DEFAULT_IMAGE_ANGLE = 270
 DEFAULT_SIGNATURE = "Sincerely,\nThomas Wells"
+TOURNAMENT_PART_LIMIT = 6
 OVERSIZE_WARNING_TEMPLATE = (
     '"{display_name}" seems to be larger than 220x220x250 mm. '
     "This might be fine if you scaled the part when printing, but your physical part "
@@ -111,6 +112,16 @@ def build_oversize_warning(part):
     return OVERSIZE_WARNING_TEMPLATE.format(display_name=part["display_name"])
 
 
+def build_tournament_limit_notice(count):
+    if count <= TOURNAMENT_PART_LIMIT:
+        return None
+    return (
+        f"You submitted {count} parts. Teams may submit more than "
+        f"{TOURNAMENT_PART_LIMIT} parts, but may only use "
+        f"{TOURNAMENT_PART_LIMIT} parts at the tournament."
+    )
+
+
 def collect_parts(team_dir, team_number, image_angle):
     stl_files = sorted(team_dir.glob("*.stl"))
     if not stl_files:
@@ -138,15 +149,22 @@ def build_plain_text(team_number, team_label, event_year, parts):
     count = len(parts)
     noun = "part" if count == 1 else "parts"
     warnings = [build_oversize_warning(part) for part in parts if part["oversized"]]
+    tournament_limit_notice = build_tournament_limit_notice(count)
     lines = [
         f"Team {team_number} ({team_label}),",
         "",
         build_receipt_intro(count, noun, event_year),
         "",
+        build_submission_deadline_note(),
+        "",
     ]
     if warnings:
         lines.append("Warnings:")
         lines.extend(warnings)
+        lines.append("")
+    if tournament_limit_notice:
+        lines.append("Tournament part limit:")
+        lines.append(tournament_limit_notice)
         lines.append("")
     lines.append("Submitted parts:")
     lines.extend(f"- {part['display_name']}" for part in parts)
@@ -172,10 +190,21 @@ def build_receipt_intro(count, noun, event_year):
     )
 
 
+def build_submission_deadline_note():
+    return (
+        "You may continue submitting new or revised models until your region's "
+        "submission deadline. The submission deadline is typically 11:59 PM on "
+        "the Friday before the tournament, but please check Team Homebase to "
+        "confirm. Further submissions should be emailed to stls@kipr.org with "
+        "the team name and number in the subject line."
+    )
+
+
 def build_html(team_number, team_label, event_year, parts):
     count = len(parts)
     noun = "part" if count == 1 else "parts"
     warnings = [build_oversize_warning(part) for part in parts if part["oversized"]]
+    tournament_limit_notice = build_tournament_limit_notice(count)
 
     blocks = []
     for part in parts:
@@ -202,10 +231,21 @@ def build_html(team_number, team_label, event_year, parts):
             "</div>"
         )
 
+    tournament_limit_block = ""
+    if tournament_limit_notice:
+        tournament_limit_block = (
+            '<div style="margin: 0 0 24px;">'
+            '<p style="margin: 0 0 8px;"><strong>Tournament part limit</strong></p>'
+            f"<p style=\"margin: 0;\">{html.escape(tournament_limit_notice)}</p>"
+            "</div>"
+        )
+
     return (
         f"<p>Team {team_number} ({team_label}),</p>"
         f"<p>{html.escape(build_receipt_intro(count, noun, event_year)).replace(str(count), f'<b>{count}</b>', 1)}</p>"
+        f"<p>{html.escape(build_submission_deadline_note())}</p>"
         f"{warning_block}"
+        f"{tournament_limit_block}"
         f"{''.join(blocks)}"
         f"<p>{build_html_signature()}</p>"
     )

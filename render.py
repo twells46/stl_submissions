@@ -14,6 +14,7 @@ FIT_BOX_MM_SORTED = tuple(sorted(FIT_BOX_MM))
 FIT_NUMERIC_TOLERANCE_MM = 0.1
 FIT_DIRECTION_TOLERANCE_DEGREES = 0.35
 FIT_REFINEMENT_STEPS_DEGREES = (5.0, 1.0, 0.25, 0.05)
+FIT_SCORE_EPSILON = 1e-6
 FIT_MANIFEST_KEYS = (
     "fit_check_version",
     "fit_box_mm",
@@ -305,6 +306,15 @@ def score_extents(extents, limits):
     return overflow + ratios
 
 
+def score_is_materially_better(candidate_score, current_score, epsilon=FIT_SCORE_EPSILON):
+    for candidate_value, current_value in zip(candidate_score, current_score):
+        if candidate_value < current_value - epsilon:
+            return True
+        if candidate_value > current_value + epsilon:
+            return False
+    return False
+
+
 def measure_extents(points, basis):
     extents = []
     for axis in basis:
@@ -345,12 +355,12 @@ def refine_basis(points, basis):
                     rotated_basis = rotate_basis(best_basis, axis_index, direction * step_radians)
                     rotated_extents = measure_extents(points, rotated_basis)
                     rotated_score = score_extents(rotated_extents, FIT_BOX_MM_SORTED)
-                    if rotated_score < candidate_score:
+                    if score_is_materially_better(rotated_score, candidate_score):
                         candidate_basis = rotated_basis
                         candidate_extents = rotated_extents
                         candidate_score = rotated_score
 
-            if candidate_score < best_score:
+            if score_is_materially_better(candidate_score, best_score):
                 best_basis = candidate_basis
                 best_extents = candidate_extents
                 best_score = candidate_score
@@ -473,7 +483,7 @@ def assess_part_fit(obj):
     best_score = None
     for _, _, basis in scored_seeds[:12]:
         refined_basis, refined_extents, refined_score = refine_basis(points, basis)
-        if best_score is None or refined_score < best_score:
+        if best_score is None or score_is_materially_better(refined_score, best_score):
             best_basis = refined_basis
             best_extents = refined_extents
             best_score = refined_score
