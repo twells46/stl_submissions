@@ -22,6 +22,14 @@ Each team directory must look like this:
 
 ```text
 <region>/
+  emails/
+    <team-folder>--receipt-<team-number>.eml
+  pictures/
+    <team-number>-<team-name>-<part-name>/
+      90.png
+      180.png
+      270.png
+      360.png
   <team-number>-<team-name>/
     email.txt
     part_one.stl
@@ -135,6 +143,50 @@ Examples:
 ./run_region.sh -v Oklahoma
 ```
 
+### `link_region_emails.sh`
+
+Collects every `.eml` in a region into `<region>/emails/` using hard links.
+
+It:
+
+- scans a region recursively for `.eml` files
+- skips the generated `emails/` directory itself
+- creates one hard link per `.eml` using a flattened name like `<team-folder>--receipt-<team-number>.eml`
+- removes stale files from `emails/` that no longer correspond to an `.eml` elsewhere in the region
+
+If you do not pass any region names, it scans every top-level region directory in the repo.
+
+Examples:
+
+```sh
+./link_region_emails.sh Oklahoma
+./link_region_emails.sh --dry-run Oklahoma
+./link_region_emails.sh
+```
+
+### `link_region_pictures.sh`
+
+Collects rendered part images into `<region>/pictures/` using hard links.
+
+It:
+
+- scans each team folder in a region
+- finds rendered part directories
+- creates one collapsed directory per part named `<team-number>-<team-name>-<part-name>`
+- hard-links image files into that directory
+- skips `.tsv` metadata files
+- removes stale generated picture files and directories
+
+If you do not pass any region names, it scans every top-level region directory in the repo.
+
+Examples:
+
+```sh
+./link_region_pictures.sh Oklahoma
+./link_region_pictures.sh --dry-run Oklahoma
+./link_region_pictures.sh
+```
+
 ## Workflow
 
 ### 1. Create the region folder
@@ -194,7 +246,27 @@ fd -td -d 1 . -x python ../compose.py {}
 
 Open the generated `.eml` files in your mail client, inspect them, then send.
 
-### 5. Or run the whole region at once
+### 5. Collect receipt emails into one folder
+
+Build a per-region `emails/` folder of hard links after receipts are generated:
+
+```sh
+./link_region_emails.sh Oklahoma
+```
+
+That gives you one place to open all region emails without duplicating the `.eml` files.
+
+### 6. Collect rendered pictures into one folder tree
+
+Build a per-region `pictures/` folder of hard-linked render images:
+
+```sh
+./link_region_pictures.sh Oklahoma
+```
+
+That gives you one collapsed folder per part without copying the image files or pulling in `.render.tsv`.
+
+### 7. Or run the whole region at once
 
 ```sh
 ./run_region.sh Oklahoma
