@@ -8,6 +8,7 @@ The workflow is simple:
 2. Normalize STL filenames.
 3. Render preview images for each part.
 4. Generate a receipt `.eml` for each team.
+5. Rebuild a Thunderbird-compatible `mbox` for each region.
 
 ## Required Layout
 
@@ -47,6 +48,8 @@ Each team directory must look like this:
       270.png
       360.png
     receipt-<team-number>.eml
+thunderbird/
+  <region>
 ```
 
 ## Naming Rules
@@ -58,6 +61,7 @@ Each team directory must look like this:
 - STL files must live directly in the team folder.
 - Render folders must match each STL stem exactly. Example: `8_Tooth.stl` renders into `8_Tooth/`.
 - The receipt file defaults to `receipt-<team-number>.eml`.
+- Thunderbird mailbox exports are written to `thunderbird/<region>` with no extension so the file can be copied directly into Thunderbird's `Local Folders` storage.
 
 ## Scripts
 
@@ -124,13 +128,35 @@ python compose.py Oklahoma/11-KIPR --dry-run
 python compose.py Oklahoma/11-KIPR --force
 ```
 
+### `build_region_mbox.py`
+
+Builds one Thunderbird-compatible `mbox` file per region from generated receipt emails.
+
+It:
+
+- scans each region recursively for source `.eml` files
+- skips generated `emails/` and `pictures/` directories to avoid duplicates
+- writes one mailbox file per region into `thunderbird/`
+- preserves each email's `Date` header in the `mbox` separator line when present
+- removes a stale mailbox file when a region no longer has any source `.eml` files
+- skips rewriting the output when the mailbox content is unchanged
+
+Examples:
+
+```sh
+python build_region_mbox.py Oklahoma
+python build_region_mbox.py
+python build_region_mbox.py --dry-run Oklahoma
+```
+
 ### `run_region.sh`
 
-Runs the full three-stage pipeline for one region:
+Runs the full four-stage pipeline for one region:
 
 1. normalize STL filenames
 2. render previews with Blender
 3. generate receipt `.eml` files
+4. rebuild `thunderbird/<region>` from those receipts
 
 It uses `fd ... -x ...` for each stage, so STL cleanup and per-team work can run in parallel.
 By default it suppresses `skip` lines and only prints work that changed something. Use `-v`
@@ -246,7 +272,28 @@ fd -td -d 1 . -x python ../compose.py {}
 
 Open the generated `.eml` files in your mail client, inspect them, then send.
 
-### 5. Collect receipt emails into one folder
+### 5. Rebuild Thunderbird mailboxes
+
+Create one copy-ready mailbox per region:
+
+```sh
+python build_region_mbox.py Oklahoma
+```
+
+For every region:
+
+```sh
+python build_region_mbox.py
+```
+
+Thunderbird notes:
+
+- The generated mailbox file is `thunderbird/<region>`, with no extension.
+- Copy that file into Thunderbird's `Local Folders` storage while Thunderbird is closed.
+- Do not copy any `.msf` index file; Thunderbird will rebuild it.
+- Re-copy the mailbox file whenever you want Thunderbird to pick up the latest generated receipts.
+
+### 6. Collect receipt emails into one folder
 
 Build a per-region `emails/` folder of hard links after receipts are generated:
 
@@ -256,7 +303,7 @@ Build a per-region `emails/` folder of hard links after receipts are generated:
 
 That gives you one place to open all region emails without duplicating the `.eml` files.
 
-### 6. Collect rendered pictures into one folder tree
+### 7. Collect rendered pictures into one folder tree
 
 Build a per-region `pictures/` folder of hard-linked render images:
 
@@ -266,7 +313,7 @@ Build a per-region `pictures/` folder of hard-linked render images:
 
 That gives you one collapsed folder per part without copying the image files or pulling in `.render.tsv`.
 
-### 7. Or run the whole region at once
+### 8. Or run the whole region at once
 
 ```sh
 ./run_region.sh Oklahoma

@@ -1,10 +1,11 @@
 import argparse
-from datetime import date
+from datetime import date, datetime, timezone
 import hashlib
 import html
 import mimetypes
 import re
 from email.message import EmailMessage
+from email.utils import format_datetime
 from pathlib import Path
 
 
@@ -95,6 +96,19 @@ def build_cid(team_number, image_angle, part_name):
     return f"{cid_label}.{token}@local"
 
 
+def build_message_id(team_number, recipient, from_address, event_year, parts):
+    token = stable_token(
+        "message-id",
+        team_number,
+        recipient,
+        from_address,
+        event_year,
+        *((part["name"], part["oversized"]) for part in parts),
+        length=24,
+    )
+    return f"<receipt-team-{team_number}.{token}@local.kipr.org>"
+
+
 def load_manifest(manifest_path):
     if not manifest_path.is_file():
         return {}
@@ -134,17 +148,32 @@ def collect_parts(team_dir, team_number, image_angle):
         image_path = team_dir / stl_path.stem / f"{image_angle}.png"
         if not image_path.is_file():
             raise SystemExit(f"Missing rendered image for {stl_path.name}: {image_path}")
-        manifest = load_manifest(team_dir / stl_path.stem / ".render.tsv")
+        manifest_path = team_dir / stl_path.stem / ".render.tsv"
+        manifest = load_manifest(manifest_path)
         parts.append(
             {
                 "name": stl_path.stem,
                 "display_name": stl_path.stem.replace("_", " "),
+                "stl_path": stl_path,
                 "image_path": image_path,
+                "manifest_path": manifest_path,
                 "cid": build_cid(team_number, image_angle, stl_path.stem),
                 "oversized": manifest.get("fit_status") == "oversized",
             }
         )
     return parts
+
+
+def determine_message_datetime(team_dir, parts):
+    source_paths = [team_dir / "email.txt"]
+    for part in parts:
+        source_paths.append(part["stl_path"])
+        source_paths.append(part["image_path"])
+        if part["manifest_path"].is_file():
+            source_paths.append(part["manifest_path"])
+
+    latest_mtime_ns = max(path.stat().st_mtime_ns for path in source_paths)
+    return datetime.fromtimestamp(latest_mtime_ns / 1_000_000_000, tz=timezone.utc)
 
 
 def build_plain_text(team_number, team_label, event_year, parts):
@@ -295,12 +324,21 @@ def build_message(
     from_address,
     image_angle,
     event_year,
+    message_datetime,
     parts,
 ):
     msg = EmailMessage()
     msg["Subject"] = f"3D Model Submission Receipt - Team {team_number}"
     msg["From"] = from_address
     msg["To"] = recipient
+    msg["Date"] = format_datetime(message_datetime)
+    msg["Message-ID"] = build_message_id(
+        team_number,
+        recipient,
+        from_address,
+        event_year,
+        parts,
+    )
 
     msg.set_content(build_plain_text(team_number, team_label, event_year, parts))
     msg.add_alternative(
@@ -341,6 +379,7 @@ def main():
     event_year = date.today().year
     recipient = load_recipient(team_dir)
     parts = collect_parts(team_dir, team_number, args.image_angle)
+    message_datetime = determine_message_datetime(team_dir, parts)
 
     output_path = args.output
     if output_path is None:
@@ -355,6 +394,7 @@ def main():
         args.from_address,
         args.image_angle,
         event_year,
+        message_datetime,
         parts,
     )
     msg_bytes = bytes(msg)

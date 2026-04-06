@@ -155,7 +155,7 @@ fi
 
 (
     cd -- "$region_dir"
-    fd -td -d 1 . -x "$self_path" --render-one "${verbose_arg[@]}" {}
+    fd -td -d 1 -g '*-*' -x "$self_path" --render-one "${verbose_arg[@]}" {}
 )
 
 if [ "$verbose" -eq 1 ]; then
@@ -164,5 +164,11 @@ fi
 
 (
     cd -- "$region_dir"
-    fd -td -d 1 . -x "$self_path" --compose-one "${verbose_arg[@]}" {}
+    fd -td -d 1 -g '*-*' -x "$self_path" --compose-one "${verbose_arg[@]}" {}
 )
+
+if [ "$verbose" -eq 1 ]; then
+    printf 'mailboxing\t%s\n' "$region_dir"
+fi
+
+run_with_optional_filter "$verbose" "$python_bin" "$script_dir/build_region_mbox.py" "$region_dir"
