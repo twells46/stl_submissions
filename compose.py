@@ -14,9 +14,9 @@ DEFAULT_IMAGE_ANGLE = 270
 DEFAULT_SIGNATURE = "Sincerely,\nThomas Wells"
 TOURNAMENT_PART_LIMIT = 6
 OVERSIZE_WARNING_TEMPLATE = (
-    '"{display_name}" seems to be larger than 220x220x250 mm. '
-    "This might be fine if you scaled the part when printing, but your physical part "
-    "may be measured at the event."
+    '"{display_name}" may be larger than 220x220x250 mm based on our automated size '
+    "check. Depending on scaling and print orientation, your part may be fine. Just "
+    "keep in mind that the physical part may be measured at the event."
 )
 
 
