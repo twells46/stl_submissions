@@ -1,5 +1,8 @@
 import argparse
+from contextlib import contextmanager
 import math
+import os
+import signal
 import sys
 from pathlib import Path
 
@@ -15,6 +18,8 @@ FIT_NUMERIC_TOLERANCE_MM = 0.1
 FIT_DIRECTION_TOLERANCE_DEGREES = 0.35
 FIT_REFINEMENT_STEPS_DEGREES = (5.0, 1.0, 0.25, 0.05)
 FIT_SCORE_EPSILON = 1e-6
+FIT_MAX_SEED_BASES = 12_000
+FIT_CHECK_TIMEOUT_SECONDS = float(os.environ.get("FIT_CHECK_TIMEOUT_SECONDS", "15"))
 FIT_MANIFEST_KEYS = (
     "fit_check_version",
     "fit_box_mm",
@@ -436,6 +441,39 @@ def collect_hull_data(obj):
         bm.free()
 
 
+def estimate_seed_basis_count(face_records, global_edge_directions):
+    return 1 + len(face_records) + sum(len(face_record["edge_directions"]) for face_record in face_records) + len(
+        global_edge_directions
+    )
+
+
+class FitCheckTimeoutError(RuntimeError):
+    pass
+
+
+@contextmanager
+def fit_check_time_limit(timeout_seconds):
+    if timeout_seconds <= 0 or not hasattr(signal, "setitimer") or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, 0)
+
+    def handle_timeout(signum, frame):
+        raise FitCheckTimeoutError(f"fit check timed out after {format_number(timeout_seconds, places=1)}s")
+
+    signal.signal(signal.SIGALRM, handle_timeout)
+    signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer != (0.0, 0.0):
+            signal.setitimer(signal.ITIMER_REAL, *previous_timer)
+
+
 def assess_part_fit(obj):
     points, face_records, global_edge_directions = collect_hull_data(obj)
     if not points:
@@ -443,6 +481,17 @@ def assess_part_fit(obj):
             "status": "unknown",
             "sorted_extents_mm": None,
             "message": "mesh contained no vertices",
+        }
+
+    estimated_seed_bases = estimate_seed_basis_count(face_records, global_edge_directions)
+    if estimated_seed_bases > FIT_MAX_SEED_BASES:
+        return {
+            "status": "unknown",
+            "sorted_extents_mm": None,
+            "message": (
+                "fit check skipped for a high-complexity hull "
+                f"({estimated_seed_bases} candidate orientations)"
+            ),
         }
 
     seed_bases = []
@@ -505,6 +554,11 @@ def assess_part_fit(obj):
         "sorted_extents_mm": sorted_extents,
         "message": None,
     }
+
+
+def run_fit_check(obj):
+    with fit_check_time_limit(FIT_CHECK_TIMEOUT_SECONDS):
+        return assess_part_fit(obj)
 
 
 def build_fit_manifest(fit_result):
@@ -625,7 +679,7 @@ def main():
         obj = load_part_object(bpy, stl_path)
 
         try:
-            fit_result = assess_part_fit(obj)
+            fit_result = run_fit_check(obj)
         except Exception as exc:
             fit_result = {
                 "status": "unknown",

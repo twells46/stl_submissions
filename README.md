@@ -88,7 +88,9 @@ Renders each STL in one team directory into PNG previews using Blender's Python 
 It also runs a Blender-based fit check for a `220x220x250 mm` printer volume. The
 check ignores orientation: if Blender finds an orientation where the part fits, the
 part is marked as fitting. Otherwise the part is marked as oversized in that part's
-`.render.tsv` file.
+`.render.tsv` file. Very complex meshes fall back to `fit_status=unknown` instead of
+blocking the render pipeline indefinitely. You can raise or lower the fit-check time
+budget with `FIT_CHECK_TIMEOUT_SECONDS=<seconds>`.
 
 Defaults:
 
@@ -251,7 +253,8 @@ fd -td -d 1 . -x blender --background --python ../render.py -- {}
 ```
 
 The renderer skips up-to-date outputs and tracks the expected render state in `.render.tsv` inside each part folder.
-That manifest also stores the result of the `220x220x250 mm` fit check.
+That manifest also stores the result of the `220x220x250 mm` fit check, including `unknown`
+when the check is skipped or times out on a high-complexity mesh.
 
 ### 4. Generate receipts
 
