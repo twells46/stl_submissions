@@ -8,9 +8,12 @@ from pathlib import Path
 
 
 DEFAULT_ANGLES = (90, 180, 270, 360)
-DEFAULT_IMAGE_SIZE = 480
+DEFAULT_IMAGE_SIZE = 720
+OUTPUT_FORMAT = "PNG"
+OUTPUT_EXTENSION = "png"
+OUTPUT_QUALITY = 80
 MANIFEST_NAME = ".render.tsv"
-MANIFEST_VERSION = "2"
+MANIFEST_VERSION = "3"
 FIT_CHECK_VERSION = "1"
 FIT_BOX_MM = (220.0, 220.0, 250.0)
 FIT_BOX_MM_SORTED = tuple(sorted(FIT_BOX_MM))
@@ -57,7 +60,7 @@ def parse_args(argv):
         "--image-size",
         type=int,
         default=DEFAULT_IMAGE_SIZE,
-        help="Width and height of each rendered PNG in pixels. Defaults to 480.",
+        help=f"Width and height of each rendered PNG in pixels. Defaults to {DEFAULT_IMAGE_SIZE}.",
     )
     parser.add_argument(
         "--dry-run",
@@ -99,8 +102,8 @@ def configure_camera_and_light(bpy):
 
 
 def configure_scene_rendering(scene, image_size):
-    scene.render.image_settings.file_format = "PNG"
-    scene.render.image_settings.compression = 100
+    scene.render.image_settings.file_format = OUTPUT_FORMAT
+    scene.render.image_settings.quality = OUTPUT_QUALITY
     scene.render.resolution_x = image_size
     scene.render.resolution_y = image_size
     scene.render.use_file_extension = True
@@ -165,6 +168,8 @@ def build_render_manifest(stl_path, angles, image_size):
         "stl_size": str(stat_result.st_size),
         "stl_mtime_ns": str(stat_result.st_mtime_ns),
         "image_size": str(image_size),
+        "image_format": OUTPUT_FORMAT,
+        "image_quality": str(OUTPUT_QUALITY),
         "angles": " ".join(str(angle) for angle in angles),
     }
 
@@ -176,7 +181,7 @@ def determine_render_plan(stl_path, output_base, angles, image_size, force):
     current_manifest = load_manifest(manifest_path)
     stl_mtime_ns = stl_path.stat().st_mtime_ns
 
-    requested_outputs = {angle: output_folder / f"{angle}.png" for angle in angles}
+    requested_outputs = {angle: output_folder / f"{angle}.{OUTPUT_EXTENSION}" for angle in angles}
     missing_or_stale = []
     for angle, image_path in requested_outputs.items():
         if not image_path.is_file():
@@ -575,15 +580,15 @@ def build_fit_manifest(fit_result):
 
 
 def render_angle(bpy, scene, obj, output_folder, angle):
-    final_path = output_folder / f"{angle}.png"
-    temp_path = output_folder / f".{angle}.tmp.png"
+    final_path = output_folder / f"{angle}.{OUTPUT_EXTENSION}"
+    temp_path = output_folder / f".{angle}.tmp.{OUTPUT_EXTENSION}"
 
     obj.rotation_euler = (0, 0, math.radians(angle))
     scene.render.filepath = str(temp_path)
     bpy.ops.render.render(write_still=True)
 
     rendered_path = temp_path
-    alternate_path = Path(f"{temp_path}.png")
+    alternate_path = Path(f"{temp_path}.{OUTPUT_EXTENSION}")
     if not rendered_path.is_file() and alternate_path.is_file():
         rendered_path = alternate_path
 
@@ -657,8 +662,8 @@ def main():
         import bpy
     except ImportError as exc:
         raise SystemExit(
-            "render.py must be run with Blender's Python environment "
-            "(for example: blender --background --python render.py -- <team-dir>)."
+            "render.py requires Blender's bpy Python module "
+            "(install it with: python -m pip install -r requirements.txt)."
         ) from exc
 
     clear_scene(bpy)

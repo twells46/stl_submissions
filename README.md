@@ -10,6 +10,27 @@ The workflow is simple:
 4. Generate a receipt `.eml` for each team.
 5. Rebuild a Thunderbird-compatible `mbox` for each region.
 
+## Development Container
+
+Open this repository in VS Code and choose **Dev Containers: Reopen in Container**.
+The container is built from the official Python 3.13 image in `Containerfile` and installs
+the pinned `bpy` wheel plus the command-line tools used by the pipeline. No separate Blender
+installation or virtual environment is needed.
+
+The repository is bind-mounted at `/workspaces/<repository-name>`. Nothing from the working
+tree is copied into the image, and all pipeline output remains directly available on the host.
+That includes part PNGs and manifests inside team folders, collected files under each region's
+`pictures/` and `emails/` directories, and generated mailboxes under `thunderbird/`.
+
+To verify the environment from the container terminal:
+
+```sh
+python -c "import bpy; print(bpy.app.version_string)"
+./run_region.sh --help
+```
+
+Rebuild the dev container whenever `Containerfile` or `requirements.txt` changes.
+
 ## Required Layout
 
 At the top level, this repo is organized by region:
@@ -83,7 +104,7 @@ Examples:
 
 ### `render.py`
 
-Renders each STL in one team directory into PNG previews using Blender's Python environment.
+Renders each STL in one team directory into PNG previews using Blender's `bpy` Python module.
 
 It also runs a Blender-based fit check for a `220x220x250 mm` printer volume. The
 check ignores orientation: if Blender finds an orientation where the part fits, the
@@ -95,7 +116,7 @@ budget with `FIT_CHECK_TIMEOUT_SECONDS=<seconds>`.
 Defaults:
 
 - Angles: `90 180 270 360`
-- Image size: `480x480`
+- Image size: `720x720`
 - Output location: the same team directory
 
 `compose.py` expects the `270.png` render for every part by default, so don't skip that angle unless you also change the compose step.
@@ -103,9 +124,9 @@ Defaults:
 Examples:
 
 ```sh
-blender --background --python render.py -- Oklahoma/11-KIPR
-blender --background --python render.py -- Oklahoma/11-KIPR --dry-run
-blender --background --python render.py -- Oklahoma/11-KIPR --force
+python render.py Oklahoma/11-KIPR
+python render.py Oklahoma/11-KIPR --dry-run
+python render.py Oklahoma/11-KIPR --force
 ```
 
 ### `compose.py`
@@ -243,13 +264,13 @@ fd -e stl -x ../clean_hubspot_dl_names.sh --dry-run
 
 ### 3. Render previews
 
-Run Blender once per team directory.
+Run the renderer once per team directory.
 
 For a whole region:
 
 ```sh
 cd Oklahoma
-fd -td -d 1 . -x blender --background --python ../render.py -- {}
+fd -td -d 1 . -x python ../render.py {}
 ```
 
 The renderer skips up-to-date outputs and tracks the expected render state in `.render.tsv` inside each part folder.

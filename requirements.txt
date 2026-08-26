@@ -1,0 +1,2 @@
+# Blender 5.2's wheel targets CPython 3.13, matching the Containerfile base.
+bpy==5.2.0

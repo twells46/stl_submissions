@@ -1,0 +1,26 @@
+{
+  "name": "KIPR STL receipt pipeline",
+  "build": {
+    "dockerfile": "../Containerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "PYTHONUNBUFFERED": "1"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "timonwong.shellcheck"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.terminal.activateEnvironment": false
+      }
+    }
+  },
+  "postCreateCommand": "python -c \"import bpy; print('bpy', bpy.app.version_string)\" && fd --version && shellcheck --version"
+}

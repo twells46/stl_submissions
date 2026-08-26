@@ -17,7 +17,6 @@ script_dir=$(
 )
 self_path=$script_dir/$(basename -- "${BASH_SOURCE[0]}")
 python_bin=${PYTHON:-python3}
-blender_bin=${BLENDER:-blender}
 
 run_with_optional_filter() {
     local verbose=$1
@@ -53,11 +52,8 @@ run_render_one() {
     local team_dir=$2
     run_with_optional_filter \
         "$verbose" \
-        "$blender_bin" \
-        --background \
-        --python \
+        "$python_bin" \
         "$script_dir/render.py" \
-        -- \
         "$team_dir"
 }
 
