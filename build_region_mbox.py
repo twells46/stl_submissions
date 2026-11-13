@@ -7,6 +7,7 @@ import filecmp
 import mailbox
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import time
 
@@ -18,7 +19,7 @@ def parse_args():
     script_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(
         description=(
-            "Build Thunderbird-compatible mbox files for one or more regions "
+            "Build Thunderbird-compatible maildir folders or mbox files for regions "
             "from generated receipt .eml files."
         )
     )
@@ -33,19 +34,23 @@ def parse_args():
         type=Path,
         default=script_dir / "thunderbird",
         help=(
-            "Directory where Thunderbird mbox files will be written. "
+            "Directory where Thunderbird mailboxes will be written. "
             "Defaults to <repo>/thunderbird."
         ),
     )
     parser.add_argument(
+        "--format", choices=("maildir", "mbox"), default="maildir",
+        help="Output storage format (default: maildir for the configured Betterbird profile).",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report whether any mbox file would be rewritten.",
+        help="Report whether any mailbox would be rewritten.",
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Rewrite output files even when the generated mbox is unchanged.",
+        help="Rewrite output even when the generated mailbox is unchanged.",
     )
     return parser.parse_args()
 
@@ -135,9 +140,46 @@ def render_temp_mbox(output_path, eml_paths):
 
 
 def output_changed(output_path, temp_path):
+    if temp_path.is_dir():
+        if not output_path.is_dir() or output_path.is_symlink():
+            return True
+        expected = {p.relative_to(temp_path) for p in temp_path.rglob("*")}
+        actual = {p.relative_to(output_path) for p in output_path.rglob("*")}
+        if expected != actual:
+            return True
+        return any(
+            (output_path / p).is_symlink()
+            or (output_path / p).is_dir() != (temp_path / p).is_dir()
+            or ((temp_path / p).is_file()
+                and not filecmp.cmp(output_path / p, temp_path / p, shallow=False))
+            for p in expected
+        )
     if not output_path.is_file():
         return True
     return not filecmp.cmp(output_path, temp_path, shallow=False)
+
+
+def render_temp_maildir(output_path, eml_paths):
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = Path(tempfile.mkdtemp(prefix=f".{output_path.name}.", dir=output_path.parent))
+    try:
+        (temp_path / "cur").mkdir(mode=0o700)
+        (temp_path / "tmp").mkdir(mode=0o700)
+        for index, eml_path in enumerate(eml_paths):
+            target = temp_path / "cur" / f"{index:08d}.eml"
+            shutil.copyfile(eml_path, target)
+            target.chmod(0o600)
+    except BaseException:
+        shutil.rmtree(temp_path)
+        raise
+    return temp_path
+
+
+def remove_output(path):
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
 
 
 def main():
@@ -157,11 +199,12 @@ def main():
                 print(f"would_remove\t{output_path}")
                 continue
 
-            output_path.unlink()
+            remove_output(output_path)
             print(f"removed\t{output_path}")
             continue
 
-        temp_path = render_temp_mbox(output_path, eml_paths)
+        render = render_temp_maildir if args.format == "maildir" else render_temp_mbox
+        temp_path = render(output_path, eml_paths)
         try:
             changed = args.force or output_changed(output_path, temp_path)
 
@@ -175,11 +218,13 @@ def main():
                 print(f"skip\t{output_path}\tunchanged")
                 continue
 
+            if output_path.exists():
+                remove_output(output_path)
             temp_path.replace(output_path)
             print(f"wrote\t{output_path}")
         finally:
             if temp_path.exists():
-                temp_path.unlink()
+                remove_output(temp_path)
 
 
 if __name__ == "__main__":

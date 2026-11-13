@@ -214,7 +214,7 @@ def build_receipt_intro(count, noun, event_year):
     return (
         f"Thank you for your submission! This email certifies our receipt of the "
         f"{count} {noun} below. Pending physical measurement and the head judge's "
-        f"approval, {subject.lower()} may be used at GCER {event_year}. "
+        f"approval, {subject.lower()} may be used at the 2026 Botball Fall Virtual Tournament. "
         f"If any submitted part is an open-source model from a "
         f"previous Botball event, it is very likely to be approved at the event, though final "
         f"approval remains with the head judge."
@@ -224,8 +224,8 @@ def build_receipt_intro(count, noun, event_year):
 def build_submission_deadline_note():
     return (
         "You may continue submitting new or revised models until the "
-        "submission deadline. The GCER STL submission deadline is 11:59 PM on "
-        "the Friday before the tournament (July 10th). Further submissions should be emailed to stls@kipr.org with "
+        "submission deadline. The STL submission deadline is 9:00 AM on "
+        "Saturday, December 5, 2026, the morning of the tournament. Further submissions should be emailed to stls@kipr.org with "
         "the team name and number in the subject line."
     )
 
