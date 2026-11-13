@@ -6,6 +6,10 @@ import signal
 import sys
 from pathlib import Path
 
+from part_sizes import (
+    SIZE_CHECK_VERSION, SIZE_GROUPS, rounded_extents_mm, size_group_for_extents,
+)
+
 
 DEFAULT_ANGLES = (90, 180, 270, 360)
 DEFAULT_IMAGE_SIZE = 720
@@ -14,10 +18,8 @@ OUTPUT_EXTENSION = "png"
 OUTPUT_QUALITY = 80
 MANIFEST_NAME = ".render.tsv"
 MANIFEST_VERSION = "3"
-FIT_CHECK_VERSION = "1"
-FIT_BOX_MM = (220.0, 220.0, 250.0)
-FIT_BOX_MM_SORTED = tuple(sorted(FIT_BOX_MM))
-FIT_NUMERIC_TOLERANCE_MM = 0.1
+FIT_CHECK_VERSION = SIZE_CHECK_VERSION
+FIT_BOX_MM = SIZE_GROUPS[-1][1]
 FIT_DIRECTION_TOLERANCE_DEGREES = 0.35
 FIT_REFINEMENT_STEPS_DEGREES = (5.0, 1.0, 0.25, 0.05)
 FIT_SCORE_EPSILON = 1e-6
@@ -29,6 +31,8 @@ FIT_MANIFEST_KEYS = (
     "fit_status",
     "fit_measured_mm",
     "fit_note",
+    "fit_volume_mm3",  # Remove legacy volume results when refreshing a manifest.
+    "fit_size_group",
 )
 
 
@@ -309,11 +313,11 @@ def dedupe_bases(bases, angle_tolerance_degrees):
     return unique_bases
 
 
-def score_extents(extents, limits):
-    sorted_extents = tuple(sorted(extents))
-    ratios = tuple(sorted_extents[index] / limits[index] for index in range(3))
-    overflow = tuple(max(0.0, ratio - 1.0) for ratio in ratios)
-    return overflow + ratios
+def score_extents(extents):
+    # Minimize the geometric box before rounding or classifying its dimensions.
+    # Area and total length break ties for flat or linear meshes with zero volume.
+    x, y, z = extents
+    return (x * y * z, x * y + y * z + z * x, x + y + z)
 
 
 def score_is_materially_better(candidate_score, current_score, epsilon=FIT_SCORE_EPSILON):
@@ -350,7 +354,7 @@ def rotate_basis(basis, axis_index, angle_radians):
 def refine_basis(points, basis):
     best_basis = basis
     best_extents = measure_extents(points, best_basis)
-    best_score = score_extents(best_extents, FIT_BOX_MM_SORTED)
+    best_score = score_extents(best_extents)
 
     for step_degrees in FIT_REFINEMENT_STEPS_DEGREES:
         step_radians = math.radians(step_degrees)
@@ -364,7 +368,7 @@ def refine_basis(points, basis):
                 for direction in (-1, 1):
                     rotated_basis = rotate_basis(best_basis, axis_index, direction * step_radians)
                     rotated_extents = measure_extents(points, rotated_basis)
-                    rotated_score = score_extents(rotated_extents, FIT_BOX_MM_SORTED)
+                    rotated_score = score_extents(rotated_extents)
                     if score_is_materially_better(rotated_score, candidate_score):
                         candidate_basis = rotated_basis
                         candidate_extents = rotated_extents
@@ -529,7 +533,7 @@ def assess_part_fit(obj):
     scored_seeds = []
     for basis in seed_bases:
         extents = measure_extents(points, basis)
-        scored_seeds.append((score_extents(extents, FIT_BOX_MM_SORTED), extents, basis))
+        scored_seeds.append((score_extents(extents), extents, basis))
     scored_seeds.sort(key=lambda item: item[0])
 
     best_basis = None
@@ -549,11 +553,8 @@ def assess_part_fit(obj):
             "message": "fit check did not converge",
         }
 
-    sorted_extents = tuple(sorted(best_extents))
-    fits = all(
-        measured <= limit + FIT_NUMERIC_TOLERANCE_MM
-        for measured, limit in zip(sorted_extents, FIT_BOX_MM_SORTED)
-    )
+    sorted_extents = tuple(sorted(rounded_extents_mm(best_extents)))
+    fits = size_group_for_extents(sorted_extents) is not None
     return {
         "status": "fits" if fits else "oversized",
         "sorted_extents_mm": sorted_extents,
@@ -573,7 +574,9 @@ def build_fit_manifest(fit_result):
         "fit_status": fit_result["status"],
     }
     if fit_result["sorted_extents_mm"] is not None:
-        manifest["fit_measured_mm"] = format_triplet(fit_result["sorted_extents_mm"])
+        extents = rounded_extents_mm(fit_result["sorted_extents_mm"])
+        manifest["fit_measured_mm"] = format_triplet(extents)
+        manifest["fit_size_group"] = size_group_for_extents(extents) or "oversized"
     if fit_result["message"]:
         manifest["fit_note"] = fit_result["message"]
     return manifest
@@ -710,7 +713,7 @@ def main():
 
         if fit_result["status"] == "oversized":
             print(
-                f"oversized\t{stl_path}\t{format_triplet(fit_result['sorted_extents_mm'])}\tbox={format_triplet(FIT_BOX_MM, places=3)}"
+                f"oversized\t{stl_path}\t{format_triplet(fit_result['sorted_extents_mm'])}\tmax_dimensions_mm={format_triplet(FIT_BOX_MM)}"
             )
 
 

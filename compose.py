@@ -8,15 +8,17 @@ from email.message import EmailMessage
 from email.utils import format_datetime
 from pathlib import Path
 
+from part_sizes import SIZE_CHECK_VERSION, SIZE_GROUPS
+
 
 DEFAULT_FROM = "twells@kipr.org"
 DEFAULT_IMAGE_ANGLE = 270
 DEFAULT_SIGNATURE = "Sincerely,\nThomas Wells"
-TOURNAMENT_PART_LIMIT = 6
 OVERSIZE_WARNING_TEMPLATE = (
-    '"{display_name}" may be larger than 220x220x250 mm based on our automated size '
-    "check. Depending on scaling and print orientation, your part may be fine. Just "
-    "keep in mind that the physical part may be measured at the event."
+    '"{display_name}" may exceed the large-part exterior dimension limits '
+    "of 220 × 220 × 250 mm in its smallest bounding box. Each dimension is rounded up "
+    "to a whole millimeter. Please check the physical part; "
+    "final measurement and approval remain with the head judge."
 )
 
 
@@ -103,7 +105,7 @@ def build_message_id(team_number, recipient, from_address, event_year, parts):
         recipient,
         from_address,
         event_year,
-        *((part["name"], part["oversized"]) for part in parts),
+        *((part["name"], part["oversized"], part.get("size_group")) for part in parts),
         length=24,
     )
     return f"<receipt-team-{team_number}.{token}@local.kipr.org>"
@@ -128,13 +130,39 @@ def build_oversize_warning(part):
     return OVERSIZE_WARNING_TEMPLATE.format(display_name=part["display_name"])
 
 
-def build_tournament_limit_notice(count):
-    if count <= TOURNAMENT_PART_LIMIT:
-        return None
+def build_size_definitions():
+    definitions = []
+    for name, dimensions, limit in SIZE_GROUPS:
+        box = " × ".join(str(value) for value in dimensions)
+        definitions.append(
+            f"{name.capitalize()}: exterior dimensions up to and including "
+            f"{box} mm, with a listed per-run "
+            f"allowance of {limit}."
+        )
     return (
-        f"You submitted {count} parts. Teams may submit more than "
-        f"{TOURNAMENT_PART_LIMIT} parts, but may only use "
-        f"{TOURNAMENT_PART_LIMIT} parts at the tournament."
+        "Size definitions: Measure the total exterior bounding box of each part. "
+        + " ".join(definitions)
+        + " Each part is counted in the smallest size group that fits all three "
+        "exterior dimensions. Exceeding any dimension requires a larger size group."
+    )
+
+
+def build_tournament_limit_notice(parts):
+    notices = []
+    for name, dimensions, limit in SIZE_GROUPS:
+        count = sum(part.get("size_group") == name for part in parts)
+        if count > limit:
+            box = " × ".join(str(value) for value in dimensions)
+            notices.append(
+                f"You submitted {count} {name} parts. The listed per-run allowance "
+                f"for this size group is {limit} ({box} mm exterior dimensions per part)."
+            )
+    if not notices:
+        return None
+    return " ".join(notices) + (
+        " Teams may submit as many parts as they like; these allowances apply to "
+        "parts fielded during a run. Your submitted selection may need review "
+        "before use; final approval remains with the head judge."
     )
 
 
@@ -150,6 +178,8 @@ def collect_parts(team_dir, team_number, image_angle):
             raise SystemExit(f"Missing rendered image for {stl_path.name}: {image_path}")
         manifest_path = team_dir / stl_path.stem / ".render.tsv"
         manifest = load_manifest(manifest_path)
+        # Older printer-fit and volume checks do not establish a dimension group.
+        current_size_check = manifest.get("fit_check_version") == SIZE_CHECK_VERSION
         parts.append(
             {
                 "name": stl_path.stem,
@@ -158,7 +188,8 @@ def collect_parts(team_dir, team_number, image_angle):
                 "image_path": image_path,
                 "manifest_path": manifest_path,
                 "cid": build_cid(team_number, image_angle, stl_path.stem),
-                "oversized": manifest.get("fit_status") == "oversized",
+                "oversized": current_size_check and manifest.get("fit_status") == "oversized",
+                "size_group": manifest.get("fit_size_group") if current_size_check else None,
             }
         )
     return parts
@@ -180,7 +211,9 @@ def build_plain_text(team_number, team_label, event_year, parts):
     count = len(parts)
     noun = "part" if count == 1 else "parts"
     warnings = [build_oversize_warning(part) for part in parts if part["oversized"]]
-    tournament_limit_notice = build_tournament_limit_notice(count)
+    tournament_limit_notice = build_tournament_limit_notice(parts)
+    if warnings or tournament_limit_notice:
+        warnings.append(build_size_definitions())
     lines = [
         f"Team {team_number} ({team_label}),",
         "",
@@ -194,7 +227,7 @@ def build_plain_text(team_number, team_label, event_year, parts):
         lines.extend(warnings)
         lines.append("")
     if tournament_limit_notice:
-        lines.append("Tournament part limit:")
+        lines.append("Per-run size-group allowances:")
         lines.append(tournament_limit_notice)
         lines.append("")
     lines.append("Submitted parts:")
@@ -234,7 +267,9 @@ def build_html(team_number, team_label, event_year, parts):
     count = len(parts)
     noun = "part" if count == 1 else "parts"
     warnings = [build_oversize_warning(part) for part in parts if part["oversized"]]
-    tournament_limit_notice = build_tournament_limit_notice(count)
+    tournament_limit_notice = build_tournament_limit_notice(parts)
+    if warnings or tournament_limit_notice:
+        warnings.append(build_size_definitions())
 
     blocks = []
     for part in parts:
@@ -265,7 +300,7 @@ def build_html(team_number, team_label, event_year, parts):
     if tournament_limit_notice:
         tournament_limit_block = (
             '<div style="margin: 0 0 24px;">'
-            '<p style="margin: 0 0 8px;"><strong>Tournament part limit</strong></p>'
+            '<p style="margin: 0 0 8px;"><strong>Per-run size-group allowances</strong></p>'
             f"<p style=\"margin: 0;\">{html.escape(tournament_limit_notice)}</p>"
             "</div>"
         )

@@ -95,12 +95,30 @@ Examples:
 
 Renders each STL in one team directory into PNG previews using Blender's `bpy` Python module.
 
-It also runs a Blender-based fit check for a `220x220x250 mm` printer volume. The
-check ignores orientation: if Blender finds an orientation where the part fits, the
-part is marked as fitting. Otherwise the part is marked as oversized in that part's
-`.render.tsv` file. Very complex meshes fall back to `fit_status=unknown` instead of
-blocking the render pipeline indefinitely. You can raise or lower the fit-check time
-budget with `FIT_CHECK_TIMEOUT_SECONDS=<seconds>`.
+It also estimates the smallest exterior bounding box over candidate orientations,
+minimizing the box's geometric volume. It then rounds each dimension **up** to a
+whole millimeter and compares all three dimensions against the fall game size
+groups. Numerical noise within 0.0001 mm of an integer is snapped to that integer
+before rounding. Axis order does not matter:
+
+| Size group | Maximum exterior dimensions | Listed per-run allowance |
+| --- | --- | --- |
+| Small | 60 × 60 × 20 mm | 6 |
+| Mid-size | 220 × 220 × 80 mm | 2 |
+| Large | 220 × 220 × 250 mm | 1 |
+
+Each part is assigned to the smallest group that fits all three dimensions.
+For example, a 61 × 10 × 10 mm part is mid-size even though it has little volume;
+a 300 × 10 × 10 mm part is oversized. Results, rounded dimensions, and size group
+are stored in `.render.tsv`.
+This is an automated orientation search, subject to physical measurement and
+judge approval. Very complex meshes fall back to `fit_status=unknown` instead of
+blocking the render pipeline indefinitely. You can raise or lower the fit-check
+time budget with `FIT_CHECK_TIMEOUT_SECONDS=<seconds>`.
+
+Rerun `render.py` before composing receipts to refresh cached printer-fit or volume-based results
+under these rules; existing current PNGs can be reused. `compose.py` ignores size
+results from the older check version.
 
 Defaults:
 
@@ -130,6 +148,9 @@ It:
 - reads each part's `.render.tsv` when present
 - embeds those images into the email
 - adds a warning section for any part marked oversized by `render.py`
+- warns when submissions exceed a listed size-group allowance (6 small, 2 mid-size,
+  1 large), while allowing unlimited submissions and leaving which combinations
+  can be fielded during a run subject to review
 - writes `receipt-<team-number>.eml` unless `--output` is provided
 
 Examples:
