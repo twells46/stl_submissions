@@ -8,28 +8,17 @@ The workflow is simple:
 2. Normalize STL filenames.
 3. Render preview images for each part.
 4. Generate a receipt `.eml` for each team.
-5. Rebuild a Thunderbird-compatible `mbox` for each region.
+5. Rebuild a Thunderbird-compatible maildir folder for each region.
 
 ## Development Container
 
 Open this repository in VS Code and choose **Dev Containers: Reopen in Container**.
-The container is built from the official Python 3.13 image in `Containerfile` and installs
-the pinned `bpy` wheel plus the command-line tools used by the pipeline. No separate Blender
-installation or virtual environment is needed.
+The image (`Dockerfile`) installs the pinned `bpy` wheel and the command-line tools the
+pipeline uses, so no separate Blender install or virtual environment is needed. Pipeline
+output is written straight into the bind-mounted repo on the host.
 
-The repository is bind-mounted at `/workspaces/<repository-name>`. Nothing from the working
-tree is copied into the image, and all pipeline output remains directly available on the host.
-That includes part PNGs and manifests inside team folders, collected files under each region's
-`pictures/` and `emails/` directories, and generated mailboxes under `thunderbird/`.
-
-To verify the environment from the container terminal:
-
-```sh
-python -c "import bpy; print(bpy.app.version_string)"
-./run_region.sh --help
-```
-
-Rebuild the dev container whenever `Containerfile` or `requirements.txt` changes.
+See [`.devcontainer/README.md`](.devcontainer/README.md) for what's in the image, the agent
+CLIs, and caveats.
 
 ## Required Layout
 
@@ -153,15 +142,18 @@ python compose.py Oklahoma/11-KIPR --force
 
 ### `build_region_mbox.py`
 
-Builds one Thunderbird-compatible `mbox` file per region from generated receipt emails.
+Builds one Thunderbird-compatible mailbox per region from generated receipt emails.
+The default is maildir for the configured Betterbird profile; use `--format mbox`
+for accounts that use mbox storage.
 
 It:
 
 - scans each region recursively for source `.eml` files
 - skips generated `emails/` and `pictures/` directories to avoid duplicates
-- writes one mailbox file per region into `thunderbird/`
-- preserves each email's `Date` header in the `mbox` separator line when present
-- removes a stale mailbox file when a region no longer has any source `.eml` files
+- writes one maildir folder per region into `thunderbird/`, with original `.eml`
+  bytes in `cur/` and an empty `tmp/` directory
+- for mbox output, preserves each email's `Date` header in the separator line when present
+- removes a stale generated mailbox when a region no longer has any source `.eml` files
 - skips rewriting the output when the mailbox content is unchanged
 
 Examples:
@@ -170,6 +162,7 @@ Examples:
 python build_region_mbox.py Oklahoma
 python build_region_mbox.py
 python build_region_mbox.py --dry-run Oklahoma
+python build_region_mbox.py --format mbox --output-dir /tmp/mbox-export Oklahoma
 ```
 
 ### `run_region.sh`
@@ -312,10 +305,31 @@ python build_region_mbox.py
 
 Thunderbird notes:
 
-- The generated mailbox file is `thunderbird/<region>`, with no extension.
-- Copy that file into Thunderbird's `Local Folders` storage while Thunderbird is closed.
+- The generated maildir folder is `thunderbird/<region>/`, containing `cur/` and `tmp/`.
+- Use `--format mbox` to generate a single mailbox file instead. Match the format
+  to the message store type in Account Settings → Local Folders.
 - Do not copy any `.msf` index file; Thunderbird will rebuild it.
 - Re-copy the mailbox file whenever you want Thunderbird to pick up the latest generated receipts.
+
+With Thunderbird/Betterbird closed, run `./thunderbird/bird.sh` from the repository
+root (or run `./bird.sh` inside `thunderbird/`). The script installs the generated
+maildir folders unchanged using Python 3. Maildir is the default for this configured
+profile; for an mbox account, pass `--format mbox` to both the generator and installer.
+If only the old mbox exports exist, rebuild them with `python build_region_mbox.py`
+before installing.
+Its default destination is the Betterbird Flatpak profile configured in the script.
+To use another profile, pass its existing Local Folders directory:
+
+```sh
+./thunderbird/bird.sh "/path/to/profile/Mail/Local Folders"
+```
+
+Reopen the mail client and look for the region folder (for example, `fall`) under
+Local Folders. The script copies messages into that folder; it does not open
+compose windows or send mail. Before replacing a region mailbox and its `.msf`
+index, it moves the previous versions into a printed `bird-backup-*` directory
+beside Local Folders. Re-running replaces the imported region folder, so move
+messages you want to keep into another folder before importing again.
 
 ### 6. Collect receipt emails into one folder
 

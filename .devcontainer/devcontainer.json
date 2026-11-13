@@ -1,26 +1,36 @@
 {
   "name": "KIPR STL receipt pipeline",
   "build": {
-    "dockerfile": "../Containerfile",
+    "dockerfile": "../Dockerfile",
     "context": ".."
   },
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  "remoteUser": "vscode",
-  "containerEnv": {
-    "PYTHONUNBUFFERED": "1"
-  },
+  "mounts": [
+    "source=claude-config,target=/home/code/.claude,type=volume",
+    "source=codex-config,target=/home/code/.codex,type=volume"
+  ],
+  // The Claude Code / Codex sandboxes use bubblewrap, which needs both:
+  //   seccomp=unconfined     - Docker's default seccomp profile blocks its namespace syscalls
+  //   systempaths=unconfined - Docker's masked /proc paths stop it mounting a fresh /proc
+  "runArgs": [
+    "--security-opt=seccomp=unconfined",
+    "--security-opt=systempaths=unconfined"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [
+        "github.vscode-pull-request-github",
         "ms-python.python",
         "ms-python.vscode-pylance",
         "timonwong.shellcheck"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "python.terminal.activateEnvironment": false
+        "python.terminal.activateEnvironment": false,
+        "terminal.integrated.defaultProfile.linux": "fish",
+        "terminal.integrated.profiles.linux": {
+          "fish": { "path": "/usr/bin/fish" }
+        }
       }
     }
-  },
-  "postCreateCommand": "python -c \"import bpy; print('bpy', bpy.app.version_string)\" && fd --version && shellcheck --version"
+  }
 }
