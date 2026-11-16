@@ -103,9 +103,13 @@ before rounding. Axis order does not matter:
 
 | Size group | Maximum exterior dimensions | Listed per-run allowance |
 | --- | --- | --- |
-| Small | 60 × 60 × 20 mm | 6 |
+| Small | 60 × 60 × 20 mm | Up to 9, within the total limit |
 | Mid-size | 220 × 220 × 80 mm | 2 |
 | Large | 220 × 220 × 250 mm | 1 |
+
+A run may include at most **9 parts total**, using **1 large slot**, **2 mid-size
+(medium) slots**, and small slots for the rest. Smaller parts may use larger slots:
+9 small parts, 8 small plus 1 medium, or 6 small plus 3 medium are all allowed.
 
 Each part is assigned to the smallest group that fits all three dimensions.
 For example, a 61 × 10 × 10 mm part is mid-size even though it has little volume;
@@ -148,9 +152,10 @@ It:
 - reads each part's `.render.tsv` when present
 - embeds those images into the email
 - adds a warning section for any part marked oversized by `render.py`
-- warns when submissions exceed a listed size-group allowance (6 small, 2 mid-size,
-  1 large), while allowing unlimited submissions and leaving which combinations
-  can be fielded during a run subject to review
+- warns when submissions exceed 9 parts total or available size slots (2 mid-size
+  and 1 large, with smaller parts allowed in larger slots),
+  while allowing unlimited submissions; these limits apply to parts fielded
+  during a run
 - writes `receipt-<team-number>.eml` unless `--output` is provided
 
 Examples:

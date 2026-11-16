@@ -71,25 +71,54 @@ class ReceiptTests(unittest.TestCase):
                      size_group=group, oversized=group is None)
                 for i, group in enumerate(groups)]
 
-    def test_no_warning_at_each_allowance(self):
-        self.assertIsNone(compose.build_tournament_limit_notice(self.parts(6, 2, 1)))
+    def test_valid_combinations_do_not_warn_in_either_format(self):
+        for small, mid, large in ((9, 0, 0), (8, 1, 0), (7, 2, 0),
+                                  (8, 0, 1), (7, 1, 1), (6, 2, 1),
+                                                                    (0, 3, 0), (6, 3, 0)):
+            with self.subTest(small=small, mid=mid, large=large):
+                parts = self.parts(small, mid, large)
+                self.assertIsNone(compose.build_tournament_limit_notice(parts))
+                for builder in (compose.build_plain_text, compose.build_html):
+                    self.assertNotIn("Warnings", builder("123", "Test", 2026, parts))
 
     def test_each_group_over_limit_warns_in_both_formats(self):
         parts = self.parts(7, 3, 2, 1)
         for builder in (compose.build_plain_text, compose.build_html):
             body = builder("123", "Test", 2026, parts)
-            for text in ("7 small parts", "3 mid-size parts", "2 large parts",
-                         "220 × 220 × 250 mm", "Teams may submit as many parts as they like",
-                         "fielded during a run"):
+            for text in ("13 parts total", "3 mid-size parts", "2 large parts",
+                         "9 parts total", "1 large slot and 2 mid-size (medium) slots",
+                                                  "Smaller parts may use larger slots",
+                         "220 × 220 × 250 mm", "Submissions are unlimited",
+                         "Per-run limit:"):
                 self.assertIn(text, body)
             self.assertNotIn("may only use", body)
             self.assertNotIn("mm³", body)
             self.assertNotIn("volume", body)
 
-    def test_nine_small_parts_get_an_advisory(self):
-        notice = compose.build_tournament_limit_notice(self.parts(small=9))
-        self.assertIn("9 small parts", notice)
-        self.assertIn("may need review", notice)
+    def test_total_limit_warns_even_when_each_group_is_within_limit(self):
+        for small, mid, large in ((9, 1, 0), (8, 2, 0), (7, 2, 1)):
+            with self.subTest(small=small, mid=mid, large=large):
+                parts = self.parts(small, mid, large)
+                for builder in (compose.build_plain_text, compose.build_html):
+                    body = builder("123", "Test", 2026, parts)
+                    self.assertIn("10 parts total", body)
+                    self.assertIn("9 parts total", body)
+
+    def test_size_caps_warn_below_total_limit(self):
+        for parts, text in ((self.parts(mid=4), "4 mid-size parts"),
+                            (self.parts(mid=3, large=1), "3 mid-size parts"),
+                            (self.parts(large=2), "2 large parts")):
+            for builder in (compose.build_plain_text, compose.build_html):
+                with self.subTest(text=text, builder=builder.__name__):
+                    body = builder("123", "Test", 2026, parts)
+                    self.assertIn(text, body)
+                    self.assertIn("9 parts total", body)
+
+    def test_ten_small_parts_get_an_advisory(self):
+        notice = compose.build_tournament_limit_notice(self.parts(small=10))
+        self.assertIn("10 parts total", notice)
+        self.assertIn("final approval rests with the head judge", notice)
+        self.assertNotIn("10 small parts", notice)
 
     def test_collection_ignores_old_checks(self):
         with tempfile.TemporaryDirectory() as directory:

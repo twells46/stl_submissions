@@ -4,9 +4,10 @@ import math
 
 
 SIZE_CHECK_VERSION = "3"
+TOTAL_PART_LIMIT = 9
 # Dimensions may be permuted, but all three limits must be satisfied.
 SIZE_GROUPS = (
-    ("small", (60, 60, 20), 6),
+    ("small", (60, 60, 20), TOTAL_PART_LIMIT),
     ("mid-size", (220, 220, 80), 2),
     ("large", (220, 220, 250), 1),
 )

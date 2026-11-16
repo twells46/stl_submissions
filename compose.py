@@ -8,7 +8,7 @@ from email.message import EmailMessage
 from email.utils import format_datetime
 from pathlib import Path
 
-from part_sizes import SIZE_CHECK_VERSION, SIZE_GROUPS
+from part_sizes import SIZE_CHECK_VERSION, SIZE_GROUPS, TOTAL_PART_LIMIT
 
 
 DEFAULT_FROM = "twells@kipr.org"
@@ -132,37 +132,36 @@ def build_oversize_warning(part):
 
 def build_size_definitions():
     definitions = []
-    for name, dimensions, limit in SIZE_GROUPS:
+    for name, dimensions, _ in SIZE_GROUPS:
         box = " × ".join(str(value) for value in dimensions)
-        definitions.append(
-            f"{name.capitalize()}: exterior dimensions up to and including "
-            f"{box} mm, with a listed per-run "
-            f"allowance of {limit}."
-        )
+        definitions.append(f"{name.capitalize()}: {box} mm.")
     return (
-        "Size definitions: Measure the total exterior bounding box of each part. "
-        + " ".join(definitions)
-        + " Each part is counted in the smallest size group that fits all three "
-        "exterior dimensions. Exceeding any dimension requires a larger size group."
+        "Size limits: " + " ".join(definitions)
+        + " Each part is classified by the smallest group that fits all three exterior dimensions."
     )
 
 
 def build_tournament_limit_notice(parts):
     notices = []
-    for name, dimensions, limit in SIZE_GROUPS:
+    if len(parts) > TOTAL_PART_LIMIT:
+        notices.append(f"{len(parts)} parts total")
+    slots = 0
+    used = 0
+    for name, _, limit in reversed(SIZE_GROUPS):
+        if name == "small":
+            continue
+        slots += limit
         count = sum(part.get("size_group") == name for part in parts)
-        if count > limit:
-            box = " × ".join(str(value) for value in dimensions)
-            notices.append(
-                f"You submitted {count} {name} parts. The listed per-run allowance "
-                f"for this size group is {limit} ({box} mm exterior dimensions per part)."
-            )
+        used += count
+        if count and used > slots:
+            notices.append(f"{count} {name} parts")
     if not notices:
         return None
-    return " ".join(notices) + (
-        " Teams may submit as many parts as they like; these allowances apply to "
-        "parts fielded during a run. Your submitted selection may need review "
-        "before use; final approval remains with the head judge."
+    return "Submitted: " + ", ".join(notices) + (
+        f". Per-run limit: {TOTAL_PART_LIMIT} parts total, with at most "
+        "1 large slot and 2 mid-size (medium) slots; the rest are small. "
+        "Smaller parts may use larger slots (e.g., a third medium in the large slot). "
+        "Submissions are unlimited; final approval rests with the head judge."
     )
 
 
@@ -257,7 +256,7 @@ def build_receipt_intro(count, noun, event_year):
 def build_submission_deadline_note():
     return (
         "You may continue submitting new or revised models until the "
-        "submission deadline. The STL submission deadline is 9:00 AM on "
+        "submission deadline. The STL submission deadline is 9:00 AM CST (3:00 PM UTC) on "
         "Saturday, December 5, 2026, the morning of the tournament. Further submissions should be emailed to stls@kipr.org with "
         "the team name and number in the subject line."
     )
